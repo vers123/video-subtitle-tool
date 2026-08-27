@@ -1,0 +1,21 @@
+# 视频字幕提取工具 - Python 依赖清单
+# 安装命令: pip install -r requirements.txt --break-system-packages
+
+# 语音转文字
+openai-whisper>=20231117
+
+# ffmpeg Python 封装
+ffmpeg-python>=0.2.0
+
+# OCR 识别硬字幕
+paddleocr>=2.7.0
+paddlepaddle>=2.6.0
+
+# SRT 字幕文件读写
+pysrt>=1.1.2
+
+# 命令行参数解析（标准库，无需安装）
+# argparse
+
+# 日志记录（标准库，无需安装）
+# logging

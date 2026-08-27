@@ -1,0 +1,21 @@
+# 视频字幕提取工具 - Cursor AI 编程规则
+# 本文件供 Cursor 自动读取，内容指向 ai_context/ 目录
+
+## 项目概述
+视频字幕提取工具，从 video/ 文件夹读取视频，按三级回退策略提取字幕（软字幕 -> OCR 硬字幕 -> Whisper 语音转文字），输出标准 SRT 文件到 subtitles/ 文件夹。
+
+## 上下文文档
+请阅读以下文档获取项目详细信息：
+- @ai_context/AI_GUIDE.md - 项目架构、模块说明、配置参数、运行方式
+- @ai_context/coding_conventions.md - 编码规范（命名、风格、注释、错误处理）
+- @ai_context/module_specs/ - 各模块详细接口规格（含测试用例）
+
+## 开发规则
+1. 修改代码前，先阅读对应模块的 @ai_context/module_specs/ 规格文档
+2. 代码必须遵循 @ai_context/coding_conventions.md 编码规范
+3. 修改公共接口后，运行 python ai_context/check_ai_docs.py 检查文档同步
+4. 三级回退策略不可破坏：embedded -> ocr -> whisper 的优先级顺序必须保持
+5. 字幕条目统一格式：{"start": float, "end": float, "text": str}
+6. 所有异常必须静默处理并返回 None 触发回退，不得中断批量处理
+7. 临时文件处理完成后必须清理
+8. 所有文档使用中文编写

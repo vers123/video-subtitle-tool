@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视频字幕提取工具 — 最终执行计划</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #181b24;
+    --surface-2: #1e2230;
+    --border: #2a2f3d;
+    --text: #e4e6ed;
+    --text-dim: #9499a8;
+    --accent: #6c8cff;
+    --accent-2: #4fd1c5;
+    --warn: #f0a050;
+    --danger: #f0606e;
+    --success: #5cc88a;
+    --code-bg: #14161e;
+    --radius: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  .container { max-width: 940px; margin: 0 auto; padding: 48px 32px 80px; }
+
+  .hero {
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px 36px;
+    margin-bottom: 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(108,140,255,0.12) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .hero-tag {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(108,140,255,0.3);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+  .hero h1 { font-size: 28px; font-weight: 700; line-height: 1.3; margin-bottom: 8px; }
+  .hero p { color: var(--text-dim); font-size: 15px; }
+  .hero-meta {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    margin-top: 20px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .hero-meta span { display: flex; align-items: center; gap: 6px; }
+  .hero-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+  .section { margin-bottom: 36px; }
+  .section-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+  }
+  .section-title .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: rgba(108,140,255,0.15);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  p { margin-bottom: 12px; color: var(--text); }
+  p.dim { color: var(--text-dim); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .card-title { font-weight: 600; font-size: 16px; margin-bottom: 10px; }
+
+  .confirm-summary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .confirm-summary table { margin: 0; }
+  .confirm-summary th { background: var(--surface-2); }
+  .confirm-row-confirmed { color: var(--success); font-weight: 600; }
+  .confirm-row-pending { color: var(--warn); font-weight: 600; }
+
+  .tree {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+    font-size: 13.5px;
+    line-height: 1.85;
+    overflow-x: auto;
+  }
+  .tree .dir { color: var(--accent); }
+  .tree .file { color: var(--text-dim); }
+  .tree .comment { color: #5c6170; }
+  .tree .highlight { color: var(--accent-2); }
+  .tree .new { color: var(--success); }
+  .tree .ai { color: #c084fc; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td { color: var(--text); }
+  tr:hover td { background: rgba(108,140,255,0.03); }
+
+  .flow-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 0;
+    position: relative;
+  }
+  .flow-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: 19px;
+    top: 42px;
+    bottom: -20px;
+    width: 2px;
+    background: var(--border);
+  }
+  .flow-step:not(:last-child) { margin-bottom: 20px; }
+  .flow-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .flow-icon.start { background: rgba(92,200,138,0.15); color: var(--success); }
+  .flow-icon.check { background: rgba(108,140,255,0.15); color: var(--accent); }
+  .flow-icon.method { background: rgba(79,209,197,0.15); color: var(--accent-2); }
+  .flow-icon.end { background: rgba(92,200,138,0.15); color: var(--success); }
+  .flow-icon.fallback { background: rgba(240,160,80,0.15); color: var(--warn); }
+  .flow-icon.ai { background: rgba(192,132,252,0.15); color: #c084fc; }
+  .flow-content h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .flow-content p { font-size: 14px; color: var(--text-dim); margin-bottom: 0; }
+
+  .workflow-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .workflow-phase {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  .workflow-phase-item {
+    flex: 1;
+    min-width: 180px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    position: relative;
+    margin: 4px;
+  }
+  .workflow-phase-item .phase-num {
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .workflow-phase-item h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .workflow-phase-item p { font-size: 13px; color: var(--text-dim); margin-bottom: 0; }
+  .workflow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 20px;
+    padding: 0 4px;
+  }
+
+  .step-list { list-style: none; counter-reset: step; }
+  .step-item {
+    position: relative;
+    padding: 16px 0 16px 44px;
+    border-bottom: 1px solid var(--border);
+  }
+  .step-item:last-child { border-bottom: none; }
+  .step-item::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 16px;
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: rgba(108,140,255,0.15);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .step-item.ai-step::before {
+    background: rgba(192,132,252,0.15);
+    color: #c084fc;
+  }
+  .step-item h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .step-item p { font-size: 14px; color: var(--text-dim); margin-bottom: 4px; }
+  .step-item code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent-2);
+    font-family: "Cascadia Code", "Fira Code", monospace;
+  }
+  .step-item.ai-step code { color: #c084fc; }
+
+  .tip {
+    background: rgba(79,209,197,0.06);
+    border-left: 3px solid var(--accent-2);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 16px;
+  }
+  .tip p { font-size: 14px; color: var(--text-dim); margin-bottom: 0; }
+
+  .warn-box {
+    background: rgba(240,160,80,0.06);
+    border-left: 3px solid var(--warn);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 16px;
+  }
+  .warn-box p { font-size: 14px; color: var(--text-dim); margin-bottom: 0; }
+
+  .ai-box {
+    background: rgba(192,132,252,0.06);
+    border-left: 3px solid #c084fc;
+    padding: 12px 16px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin-bottom: 16px;
+  }
+  .ai-box p { font-size: 14px; color: var(--text-dim); margin-bottom: 0; }
+
+  code.inline {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--accent-2);
+    font-family: "Cascadia Code", "Fira Code", monospace;
+  }
+
+  .divider { height: 1px; background: var(--border); margin: 32px 0; }
+
+  .footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .badge {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 600;
+    display: inline-block;
+  }
+  .badge-confirmed { background: rgba(92,200,138,0.15); color: var(--success); }
+  .badge-pending { background: rgba(240,160,80,0.15); color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Hero -->
+  <div class="hero">
+    <span class="hero-tag">Final Plan v5</span>
+    <h1>视频字幕提取工具 — 最终执行计划</h1>
+    <p>从根目录 <code class="inline">video/</code> 文件夹读取视频，按优先级回退策略提取字幕，输出标准 SRT 文件，归档至 <code class="inline">subtitles/</code> 文件夹。项目内含 AI 编程辅助模块，供 AI 编程工具读取项目上下文</p>
+    <div class="hero-meta">
+      <span><span class="dot"></span> 状态：全部确认完毕，自检中</span>
+      <span><span class="dot"></span> 日期：2026-08-27</span>
+      <span><span class="dot"></span> 版本：v5（含 GitHub 推送）</span>
+    </div>
+  </div>
+
+  <!-- 0. 工作流程说明 -->
+  <div class="section">
+    <div class="section-title"><span class="num">0</span> 工作流程说明</div>
+    <p>本项目遵循"先规划后执行"的工作流程，确保需求在实施前得到充分确认：</p>
+    <div class="workflow-diagram">
+      <div class="workflow-phase">
+        <div class="workflow-phase-item">
+          <div class="phase-num">Phase 0</div>
+          <h4>创建计划文档</h4>
+          <p>在执行任何操作前，先编写完整的计划文档，包含技术方案、目录结构、执行步骤、待确认项和待补充项</p>
+        </div>
+        <div class="workflow-arrow">-></div>
+        <div class="workflow-phase-item">
+          <div class="phase-num">Phase 1</div>
+          <h4>逐项提问确认</h4>
+          <p>根据计划文档中的待确认项和待补充项，逐一向用户提问，用户逐项确认或补充信息</p>
+        </div>
+        <div class="workflow-arrow">-></div>
+        <div class="workflow-phase-item">
+          <div class="phase-num">Phase 2</div>
+          <h4>更新计划文档</h4>
+          <p>将用户的确认结果整合到最终计划文档中，形成可执行版本</p>
+        </div>
+        <div class="workflow-arrow">-></div>
+        <div class="workflow-phase-item">
+          <div class="phase-num">Phase 3</div>
+          <h4>执行实施</h4>
+          <p>按最终计划文档逐步实施：环境搭建、模块开发、测试、文档编写</p>
+        </div>
+      </div>
+    </div>
+    <div class="ai-box">
+      <p>当前处于 Phase 2：全部 40 项（五轮确认）已完毕，正在自检。自检通过后将初始化 Git、提交代码并推送到 GitHub。</p>
+    </div>
+  </div>
+
+  <!-- 1. 确认结果汇总 -->
+  <div class="section">
+    <div class="section-title"><span class="num">1</span> 确认结果汇总</div>
+
+    <div class="card-title">第一轮已确认（14 项）</div>
+    <div class="confirm-summary">
+      <table>
+        <thead>
+          <tr><th style="width:30px">#</th><th>项目</th><th>最终决策</th><th style="width:60px">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>C1</td><td>字幕提取方式</td><td>混合策略：ffmpeg 软字幕 → OCR 硬字幕 → Whisper 语音转文字</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>C2</td><td>Whisper 模型</td><td>medium（自动检测硬件，不足降级 small）</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>C3</td><td>字幕输出格式</td><td>SRT</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>C4</td><td>目标语言</td><td>自动检测</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>C5</td><td>字幕翻译</td><td>不需要</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>C6</td><td>运行方式</td><td>命令行工具</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>S1</td><td>视频格式</td><td>MP4、MKV、AVI、MOV（不支持格式报错说明）</td><td class="confirm-row-confirmed">已补充</td></tr>
+          <tr><td>S2</td><td>内嵌字幕</td><td>部分有</td><td class="confirm-row-confirmed">已补充</td></tr>
+          <tr><td>S3</td><td>内容类型</td><td>原神官方"拾枝杂谈"系列为主</td><td class="confirm-row-confirmed">已补充</td></tr>
+          <tr><td>S4</td><td>数量与时长</td><td>不确定（程序支持任意数量）</td><td class="confirm-row-confirmed">已补充</td></tr>
+          <tr><td>S5</td><td>硬件环境</td><td>不确定（程序自动检测）</td><td class="confirm-row-confirmed">已补充</td></tr>
+          <tr><td>S6</td><td>Python 环境</td><td>不确定（程序初始化检查）</td><td class="confirm-row-confirmed">已补充</td></tr>
+          <tr><td>S7</td><td>命名规则</td><td>subtitles/视频名/视频名_提取方式.srt</td><td class="confirm-row-confirmed">已补充</td></tr>
+          <tr><td>S8</td><td>中间文件</td><td>自动清理临时 WAV</td><td class="confirm-row-confirmed">已补充</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-title">第二轮已确认（AI 编程辅助模块）</div>
+    <div class="confirm-summary">
+      <table>
+        <thead>
+          <tr><th style="width:30px">#</th><th>项目</th><th>最终决策</th><th style="width:60px">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>A1</td><td>AI 编程工具</td><td>不固定，采用通用格式兼容所有工具</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>A2</td><td>上下文文件格式</td><td>通用 Markdown，根目录放 .cursorrules 和 CLAUDE.md 快捷文件指向 ai_context/</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>A3</td><td>内容详细程度</td><td>详细接口规格：AI_GUIDE.md 概览 + module_specs/ 各模块独立文档</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>A4</td><td>编码规范</td><td>包含完整规范：命名约定、PEP 8、注释格式、错误处理模式、日志格式</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>A5</td><td>维护方式</td><td>两者结合：初次手动编写，后续提供脚本提取接口变更提示人工更新</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>A6</td><td>语言</td><td>中文</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>A7</td><td>测试规格</td><td>包含：各模块文档中加入测试用例和验收标准</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>A8</td><td>更新时机</td><td>手动触发检查：提供脚本检查代码与文档是否同步</td><td class="confirm-row-confirmed">已确认</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-title">第三轮已确认（预览效果与基础示例）</div>
+    <div class="confirm-summary">
+      <table>
+        <thead>
+          <tr><th style="width:30px">#</th><th>项目</th><th>最终决策</th><th style="width:60px">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>P1</td><td>预览覆盖范围</td><td>全部 4 项：CLI输出 + 目录结构 + SRT内容 + AI文档</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>P2</td><td>示例数据来源</td><td>虚构示例名称，不关联特定视频内容</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>P3</td><td>SRT示例内容</td><td>通用示例文本</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>P4</td><td>基础示例数量</td><td>全部 4 个：端到端运行 + 指定视频 + 模块调用 + AI上下文</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>P5</td><td>代码片段详细度</td><td>完整可运行：含 import、参数、返回值</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>P6</td><td>命令行参数</td><td>支持 --input、--method、--output 等参数</td><td class="confirm-row-confirmed">已确认</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-title">第四轮已确认（Python 虚拟环境）</div>
+    <div class="confirm-summary">
+      <table>
+        <thead>
+          <tr><th style="width:30px">#</th><th>项目</th><th>最终决策</th><th style="width:60px">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>V1</td><td>虚拟环境名称</td><td>venv</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>V2</td><td>创建方式</td><td>python -m venv（标准库自带）</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>V3</td><td>gitignore</td><td>需要 .gitignore 文件（排除 venv/、temp/、__pycache__/、error.log 等）</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>V4</td><td>依赖安装方式</td><td>requirements.txt 宽松版本（>= 版本范围）</td><td class="confirm-row-confirmed">已确认</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-title">第五轮已确认（GitHub 推送）</div>
+    <div class="confirm-summary">
+      <table>
+        <thead>
+          <tr><th style="width:30px">#</th><th>项目</th><th>最终决策</th><th style="width:60px">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>G1</td><td>仓库名称</td><td>video-subtitle-tool</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>G2</td><td>仓库可见性</td><td>Public 公开</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>G3</td><td>仓库描述</td><td>视频字幕提取工具</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>G4</td><td>Git 用户名</td><td>Vers123</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>G5</td><td>Git 邮箱</td><td>linjiahui472@gmail.com</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>G6</td><td>认证方式</td><td>Personal Access Token (PAT)</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>G7</td><td>许可证</td><td>MIT License</td><td class="confirm-row-confirmed">已确认</td></tr>
+          <tr><td>G8</td><td>GitHub 用户名</td><td>Vers123（仓库 URL: github.com/Vers123/video-subtitle-tool）</td><td class="confirm-row-confirmed">已确认</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 2. 技术方案 -->
+  <div class="section">
+    <div class="section-title"><span class="num">2</span> 技术方案</div>
+
+    <div class="card">
+      <div class="card-title">技术栈</div>
+      <table>
+        <thead>
+          <tr><th>组件</th><th>选型</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>开发语言</td><td>Python 3.10+</td><td>主程序逻辑、文件管理</td></tr>
+          <tr><td>音频提取</td><td>ffmpeg + ffmpeg-python</td><td>从视频中分离音轨（16kHz mono WAV）</td></tr>
+          <tr><td>软字幕提取</td><td>ffprobe + ffmpeg</td><td>检测并提取视频内嵌字幕轨道</td></tr>
+          <tr><td>硬字幕 OCR</td><td>PaddleOCR</td><td>识别画面底部烧录字幕</td></tr>
+          <tr><td>语音转文字</td><td>openai-whisper</td><td>ASR 转录，生成带时间戳文本</td></tr>
+          <tr><td>字幕输出</td><td>whisper 内置 SRT</td><td>标准字幕格式生成</td></tr>
+          <tr><td>字幕后处理</td><td>pysrt</td><td>字幕格式化、时间轴修正</td></tr>
+          <tr><td style="color:#c084fc">AI 编程辅助</td><td style="color:#c084fc">AI_GUIDE.md（通用 Markdown）</td><td style="color:#c084fc">项目上下文文档，供 AI 编程工具读取</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">字幕提取优先级回退流程</div>
+      <p class="dim">对每个视频文件，按以下优先级依次尝试提取字幕，成功即停止，进入下一个视频：</p>
+    </div>
+
+    <div class="flow-diagram">
+      <div class="flow-step">
+        <div class="flow-icon start">1</div>
+        <div class="flow-content">
+          <h4>环境检测</h4>
+          <p>检查 Python、ffmpeg 是否可用；检测 GPU 型号和显存，自动选择 Whisper 模型（够用则 medium，不足则 small）</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon check">2</div>
+        <div class="flow-content">
+          <h4>尝试提取软字幕（ffprobe + ffmpeg）</h4>
+          <p>检测视频是否包含字幕轨道。有则直接提取为 SRT，文件名标记 <code class="inline">xxx_embedded.srt</code></p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon fallback">3</div>
+        <div class="flow-content">
+          <h4>回退：OCR 识别硬字幕（PaddleOCR）</h4>
+          <p>无软字幕时，截取视频画面底部区域，用 PaddleOCR 识别烧录字幕。生成 <code class="inline">xxx_ocr.srt</code></p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon fallback">4</div>
+        <div class="flow-content">
+          <h4>最终回退：Whisper 语音转文字</h4>
+          <p>OCR 无法识别时，提取音轨用 Whisper 转录。生成 <code class="inline">xxx_whisper.srt</code></p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon end">5</div>
+        <div class="flow-content">
+          <h4>保存与清理</h4>
+          <p>字幕保存到 <code class="inline">subtitles/视频文件名/</code> 子文件夹，自动清理临时 WAV 文件</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <p>Whisper 模型规格：medium 参数量 769M，显存需求 ~5.5GB，英文 WER ~3.0%，适合视频字幕生成 [$TRAE_REF](https://openwhispr.com/blog/whisper-model-sizes-explained)。GPU 不足时自动降级为 small（244M，~2GB 显存）。</p>
+    </div>
+  </div>
+
+  <!-- 3. 目录结构 -->
+  <div class="section">
+    <div class="section-title"><span class="num">3</span> 目录结构设计</div>
+    <div class="tree">
+<span class="dir">project_root/</span>
+├── <span class="dir">video/</span>                          <span class="comment"># 输入视频文件夹</span>
+│   ├── <span class="file">demo_video_01.mp4</span>
+│   ├── <span class="file">demo_video_02.mkv</span>
+│   └── <span class="file">demo_video_03.avi</span>
+├── <span class="dir new highlight">subtitles/</span>                    <span class="comment"># 输出字幕文件夹（英文名）</span>
+│   ├── <span class="dir">demo_video_01/</span>              <span class="comment"># 按视频文件名命名的子文件夹</span>
+│   │   └── <span class="file">demo_video_01_embedded.srt</span>  <span class="comment"># 按提取方式标记后缀</span>
+│   ├── <span class="dir">demo_video_02/</span>
+│   │   └── <span class="file">demo_video_02_ocr.srt</span>
+│   └── <span class="dir">demo_video_03/</span>
+│       └── <span class="file">demo_video_03_whisper.srt</span>
+├── <span class="file new">main.py</span>                        <span class="comment"># 主程序入口</span>
+├── <span class="file new">config.py</span>                      <span class="comment"># 配置文件（模型、路径、语言等）</span>
+├── <span class="dir new">modules/</span>
+│   ├── <span class="file new">env_check.py</span>                 <span class="comment"># 环境检测（Python/ffmpeg/GPU）</span>
+│   ├── <span class="file new">subtitle_extractor.py</span>       <span class="comment"># 软字幕提取（ffprobe + ffmpeg）</span>
+│   ├── <span class="file new">ocr_subtitle.py</span>             <span class="comment"># 硬字幕 OCR 识别（PaddleOCR）</span>
+│   ├── <span class="file new">transcriber.py</span>               <span class="comment"># Whisper 语音转文字</span>
+│   ├── <span class="file new">subtitle_writer.py</span>          <span class="comment"># SRT 格式化与写入</span>
+│   └── <span class="file new">file_utils.py</span>                <span class="comment"># 文件扫描、路径管理、清理</span>
+├── <span class="dir ai">ai_context/</span>                      <span class="comment"># AI 编程辅助模块（通用 Markdown）</span>
+│   ├── <span class="file ai">AI_GUIDE.md</span>                  <span class="comment"># 项目上下文主文档（架构、模块、接口、流程）</span>
+│   ├── <span class="file ai">module_specs/</span>               <span class="comment"># 各模块详细接口规格（含测试用例）</span>
+│   │   ├── <span class="file ai">env_check.md</span>
+│   │   ├── <span class="file ai">subtitle_extractor.md</span>
+│   │   ├── <span class="file ai">ocr_subtitle.md</span>
+│   │   ├── <span class="file ai">transcriber.md</span>
+│   │   ├── <span class="file ai">subtitle_writer.md</span>
+│   │   └── <span class="file ai">file_utils.md</span>
+│   ├── <span class="file ai">coding_conventions.md</span>        <span class="comment"># 编码规范（命名、PEP 8、注释、错误处理、日志）</span>
+│   └── <span class="file ai">check_ai_docs.py</span>            <span class="comment"># 文档同步检查脚本（手动运行）</span>
+├── <span class="file ai">.cursorrules</span>                     <span class="comment"># Cursor 适配文件（指向 ai_context/）</span>
+├── <span class="file ai">CLAUDE.md</span>                       <span class="comment"># Claude Code 适配文件（指向 ai_context/）</span>
+├── <span class="file">requirements.txt</span>                <span class="comment"># Python 依赖清单</span>
+├── <span class="file">README.md</span>                        <span class="comment"># 使用说明</span>
+├── <span class="dir new highlight">venv/</span>                        <span class="comment"># Python 虚拟环境（不纳入版本控制）</span>
+└── <span class="file ai">error.log</span>                       <span class="comment"># 运行错误日志</span>
+    </div>
+    <div class="ai-box">
+      <p><code class="inline">ai_context/</code> 文件夹是 AI 编程辅助模块，包含项目架构文档、各模块接口规格、编码规范等。AI 编程工具（如 Cursor、Claude Code、Copilot 等）可读取该目录内容，快速理解项目结构和实现细节，辅助后续开发、维护和扩展。文件格式为通用 Markdown，根目录放 .cursorrules 和 CLAUDE.md 适配文件。</p>
+    </div>
+  </div>
+
+  <!-- 4. AI 编程辅助模块详细说明 -->
+  <div class="section">
+    <div class="section-title"><span class="num">4</span> AI 编程辅助模块</div>
+
+    <div class="card">
+      <div class="card-title">模块概述</div>
+      <p>该模块是一组面向 AI 编程工具的项目上下文文档。当开发者使用 AI 编程助手（Cursor、Claude Code、GitHub Copilot 等）对项目进行开发或修改时，AI 可读取这些文档，快速理解项目架构、模块职责、接口定义、数据流和编码规范，从而生成更准确的代码。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">文档结构</div>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>内容</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code class="inline">AI_GUIDE.md</code></td>
+            <td>主文档：项目概述、整体架构图、三级回退流程图、目录结构说明、配置参数表、依赖清单、运行方式</td>
+          </tr>
+          <tr>
+            <td><code class="inline">module_specs/</code></td>
+            <td>各模块详细规格：每个 .py 文件对应的接口定义、输入输出格式、关键算法说明、异常处理策略、依赖关系</td>
+          </tr>
+          <tr>
+            <td><code class="inline">coding_conventions.md</code></td>
+            <td>编码规范：命名约定（变量/函数/类/文件）、代码风格（PEP 8）、注释格式、错误处理模式、日志格式</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">AI_GUIDE.md 预期内容</div>
+      <p><strong>1. 项目概述</strong> — 项目目标、核心功能一句话描述、适用场景</p>
+      <p><strong>2. 系统架构</strong> — 模块依赖关系图、数据流向图、三级回退决策树</p>
+      <p><strong>3. 目录结构</strong> — 完整目录树、每个文件/文件夹的职责</p>
+      <p><strong>4. 模块说明</strong> — 每个 Python 模块的职责、公共接口、输入输出</p>
+      <p><strong>5. 配置说明</strong> — config.py 中所有可配置参数、默认值、取值范围</p>
+      <p><strong>6. 依赖清单</strong> — 系统依赖（Python/ffmpeg）、Python 包依赖、版本要求</p>
+      <p><strong>7. 运行方式</strong> — 安装步骤、命令行用法、输出说明</p>
+      <p><strong>8. 字幕格式规范</strong> — SRT 文件结构、时间轴格式、编码、命名规则</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">module_specs/ 各文件预期内容</div>
+      <p>每个模块规格文件包含：</p>
+      <p>— 模块职责一句话描述</p>
+      <p>— 公共函数/类签名（参数名、类型、返回值）</p>
+      <p>— 输入数据格式（如 ffprobe 返回的 JSON 结构）</p>
+      <p>— 输出数据格式（如 SRT 文本结构）</p>
+      <p>— 关键算法说明（如 OCR 区域截取逻辑、字幕合并去重算法）</p>
+      <p>— 异常处理策略（何时返回 None 触发回退、何时记录日志）</p>
+      <p>— 与其他模块的依赖关系</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">维护策略</div>
+      <p><strong>初次编写：</strong>手动编写全部 AI 上下文文档（AI_GUIDE.md、module_specs/、coding_conventions.md）</p>
+      <p><strong>后续维护：</strong>提供 <code class="inline">check_ai_docs.py</code> 脚本，从代码中提取函数签名和接口变更，与文档对比后输出差异提示，由开发者手动更新文档</p>
+      <p><strong>更新时机：</strong>开发者手动运行检查脚本，主动控制更新节奏</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">根目录适配文件</div>
+      <p>在项目根目录放置两个快捷适配文件，内容指向 <code class="inline">ai_context/</code> 目录：</p>
+      <p>— <code class="inline">.cursorrules</code>：引用 AI_GUIDE.md 内容，供 Cursor 读取</p>
+      <p>— <code class="inline">CLAUDE.md</code>：引用 AI_GUIDE.md 内容，供 Claude Code 读取</p>
+      <p>其他 AI 工具可通过 <code class="inline">@ai_context/AI_GUIDE.md</code> 方式引用</p>
+    </div>
+
+    <div class="ai-box">
+      <p>全部 8 项已确认：通用 Markdown 格式、详细接口规格、包含完整编码规范和测试规格、中文编写、两者结合维护、手动触发更新检查。根目录放 .cursorrules 和 CLAUDE.md 适配文件。</p>
+    </div>
+  </div>
+
+  <!-- 5. 详细执行步骤 -->
+  <div class="section">
+    <div class="section-title"><span class="num">5</span> 详细执行步骤</div>
+
+    <ol class="step-list">
+      <li class="step-item ai-step">
+        <h4>创建计划文档与提问流程</h4>
+        <p>在执行任何操作前，先编写完整的计划文档，包含技术方案、目录结构、执行步骤</p>
+        <p>列出待确认项和待补充项，逐一向用户提问确认</p>
+        <p>将确认结果整合，形成最终可执行版本（即本文档）</p>
+      </li>
+      <li class="step-item">
+        <h4>创建 Python 虚拟环境</h4>
+        <p>在项目根目录创建虚拟环境：<code>python -m venv venv</code></p>
+        <p>激活虚拟环境后安装依赖：<code>pip install -r requirements.txt</code></p>
+        <p>所有 Python 包均在虚拟环境中安装，不污染系统环境</p>
+        <p>README 中提供虚拟环境创建、激活、依赖安装的完整步骤</p>
+      </li>
+      <li class="step-item">
+        <h4>环境检测模块</h4>
+        <p>编写 <code>env_check.py</code>：检测 Python 版本、ffmpeg 是否可用、NVIDIA GPU 型号及显存</p>
+        <p>根据 GPU 情况自动选择 Whisper 模型：显存 >= 6GB 用 medium，否则用 small</p>
+        <p>缺失依赖时输出安装指引</p>
+      </li>
+      <li class="step-item">
+        <h4>配置文件</h4>
+        <p>编写 <code>config.py</code>，定义可配置参数：视频输入路径、字幕输出路径、Whisper 模型、目标语言、输出格式、支持扩展名、OCR 截取区域</p>
+      </li>
+      <li class="step-item">
+        <h4>软字幕提取模块</h4>
+        <p>编写 <code>subtitle_extractor.py</code>：用 ffprobe 检测字幕轨道，有则用 ffmpeg 提取为 SRT，无则返回 None</p>
+      </li>
+      <li class="step-item">
+        <h4>硬字幕 OCR 模块</h4>
+        <p>编写 <code>ocr_subtitle.py</code>：截取视频底部区域，PaddleOCR 识别文字，按帧时间戳生成字幕，相邻相同文本合并去重</p>
+      </li>
+      <li class="step-item">
+        <h4>语音转文字模块</h4>
+        <p>编写 <code>transcriber.py</code>：ffmpeg 提取音轨为 16kHz mono WAV，Whisper 模型转录，自动检测语言</p>
+      </li>
+      <li class="step-item">
+        <h4>字幕写入模块</h4>
+        <p>编写 <code>subtitle_writer.py</code>：统一各来源字幕为标准 SRT，按提取方式添加文件名后缀</p>
+      </li>
+      <li class="step-item">
+        <h4>文件管理模块</h4>
+        <p>编写 <code>file_utils.py</code>：扫描 video/ 下支持格式文件，创建输出子文件夹，保存 SRT 后清理临时文件，不支持格式报错跳过</p>
+      </li>
+      <li class="step-item">
+        <h4>主程序调度</h4>
+        <p>编写 <code>main.py</code>：环境检测 → 遍历视频 → 三级回退提取 → 保存字幕 → 进度显示 + 异常处理 + 错误日志</p>
+        <p>支持命令行参数：<code>--input</code> 指定单个视频、<code>--method</code> 指定提取方式、<code>--output</code> 指定输出路径</p>
+      </li>
+      <li class="step-item ai-step">
+        <h4>AI 编程辅助模块</h4>
+        <p>编写 <code>ai_context/AI_GUIDE.md</code>：项目概述、架构图、目录结构、模块说明、配置参数、依赖清单、运行方式</p>
+        <p>编写 <code>ai_context/module_specs/</code> 各模块接口规格文档</p>
+        <p>编写 <code>ai_context/coding_conventions.md</code>：命名约定、代码风格、注释格式、错误处理模式</p>
+        <p>编写 <code>ai_context/check_ai_docs.py</code>：文档同步检查脚本</p>
+        <p>编写根目录 <code>.cursorrules</code> 和 <code>CLAUDE.md</code> 适配文件</p>
+      </li>
+      <li class="step-item">
+        <h4>依赖与文档</h4>
+        <p>编写 <code>requirements.txt</code> 和 <code>README.md</code></p>
+      </li>
+      <li class="step-item">
+        <h4>功能测试</h4>
+        <p>准备测试视频，验证三级回退策略和字幕输出正确性</p>
+      </li>
+    </ol>
+  </div>
+
+  <!-- 6. 依赖清单 -->
+  <div class="section">
+    <div class="section-title"><span class="num">6</span> 依赖清单</div>
+    <div class="card">
+      <div class="card-title">虚拟环境</div>
+      <p>项目使用 Python 虚拟环境（venv）运行，所有 Python 依赖包安装在虚拟环境中，不污染系统环境。</p>
+      <p>创建和激活步骤（README 中有详细说明）：</p>
+      <p>— 创建：<code class="inline">python -m venv venv</code></p>
+      <p>— 激活（Linux/macOS）：<code class="inline">source venv/bin/activate</code></p>
+      <p>— 激活（Windows）：<code class="inline">venv\Scripts\activate</code></p>
+      <p>— 安装依赖：<code class="inline">pip install -r requirements.txt</code></p>
+      <p>— 运行程序：<code class="inline">python main.py</code></p>
+    </div>
+    <table>
+      <thead>
+        <tr><th>依赖</th><th>用途</th><th>安装方式</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Python 3.10+</td><td>运行环境</td><td>系统安装</td></tr>
+        <tr><td>ffmpeg</td><td>音视频处理</td><td>系统安装，程序检测</td></tr>
+        <tr><td>openai-whisper</td><td>语音转文字</td><td>pip install openai-whisper</td></tr>
+        <tr><td>ffmpeg-python</td><td>Python 调用 ffmpeg</td><td>pip install ffmpeg-python</td></tr>
+        <tr><td>paddleocr</td><td>OCR 识别硬字幕</td><td>pip install paddleocr</td></tr>
+        <tr><td>paddlepaddle</td><td>PaddleOCR 后端</td><td>pip install paddlepaddle</td></tr>
+        <tr><td>pysrt</td><td>SRT 文件读写</td><td>pip install pysrt</td></tr>
+      </tbody>
+    </table>
+    <div class="tip">
+      <p>首次运行时 Whisper medium 模型约需下载 ~1.5GB，PaddleOCR 中文模型约需下载 ~100MB。程序首次运行会较慢，后续运行将使用本地缓存。</p>
+    </div>
+  </div>
+
+  <!-- 7. 项目最终预览效果 -->
+  <div class="section">
+    <div class="section-title"><span class="num">7</span> 项目最终预览效果</div>
+    <p>以下为项目完成后各环节的预期效果预览。全部 4 项预览已确认保留，示例使用虚构视频名称和通用文本。</p>
+
+    <div class="card">
+      <div class="card-title">命令行运行效果</div>
+      <p class="dim">用户在终端执行 <code class="inline">python main.py</code> 后的输出效果：</p>
+      <div class="tree" style="margin-top:12px;">
+<span class="comment">$ python main.py</span>
+
+<span class="highlight">=== 视频字幕提取工具 ===</span>
+<span class="comment"># 环境检测</span>
+[OK] Python 3.11.5
+[OK] ffmpeg 6.0
+[OK] GPU: NVIDIA RTX 3060 (12GB) -> 模型: medium
+
+<span class="comment"># 扫描视频文件</span>
+找到 3 个视频文件:
+  1. demo_video_01.mp4 (MP4)
+  2. demo_video_02.mkv (MKV)
+  3. demo_video_03.avi (AVI)
+
+<span class="comment"># 逐个处理</span>
+<span class="new">[1/3] demo_video_01.mp4</span>
+  -> 尝试提取内嵌字幕... <span class="highlight">找到软字幕轨道</span>
+  -> 提取完成，保存为 demo_video_01_embedded.srt
+
+<span class="new">[2/3] demo_video_02.mkv</span>
+  -> 尝试提取内嵌字幕... <span class="warn">无软字幕轨道</span>
+  -> 尝试 OCR 识别画面硬字幕... <span class="highlight">识别成功</span>
+  -> 保存为 demo_video_02_ocr.srt
+
+<span class="new">[3/3] demo_video_03.avi</span>
+  -> 尝试提取内嵌字幕... <span class="warn">无软字幕轨道</span>
+  -> 尝试 OCR 识别画面硬字幕... <span class="warn">未检测到硬字幕</span>
+  -> 回退到 Whisper 语音转文字... <span class="highlight">转录完成</span>
+  -> 保存为 demo_video_03_whisper.srt
+
+<span class="highlight">=== 处理完成 ===</span>
+成功: 3 / 失败: 0
+字幕文件已保存至: subtitles/
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">输出目录结构</div>
+      <div class="tree" style="margin-top:12px;">
+subtitles/
+├── <span class="dir">demo_video_01/</span>
+│   └── <span class="file">demo_video_01_embedded.srt</span>   <span class="comment"># 软字幕提取</span>
+├── <span class="dir">demo_video_02/</span>
+│   └── <span class="file">demo_video_02_ocr.srt</span>       <span class="comment"># OCR 识别</span>
+└── <span class="dir">demo_video_03/</span>
+    └── <span class="file">demo_video_03_whisper.srt</span>   <span class="comment"># 语音转文字</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">SRT 字幕文件内容示例</div>
+      <p class="dim">标准 SRT 三行结构（序号、时间轴、文本）：</p>
+      <div class="tree" style="margin-top:12px;">
+1
+00:00:01,500 --> 00:00:04,200
+这是一段示例字幕文本，用于展示 SRT 格式
+
+2
+00:00:04,500 --> 00:00:07,800
+每条字幕由序号、时间轴和文本三行组成
+
+3
+00:00:08,100 --> 00:00:11,500
+时间轴格式为 HH:MM:SS,mmm --> HH:MM:SS,mmm
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">AI 上下文文档预览</div>
+      <p class="dim">AI_GUIDE.md 主文档结构预览：</p>
+      <div class="tree" style="margin-top:12px;">
+# 视频字幕提取工具 - AI 编程指南
+
+## 1. 项目概述
+从 video/ 文件夹读取视频，按优先级回退策略提取字幕...
+
+## 2. 系统架构
+main.py -> env_check -> [subtitle_extractor -> ocr_subtitle -> transcriber]
+         -> subtitle_writer -> file_utils
+
+## 3. 模块说明
+| 模块 | 职责 | 公共接口 |
+|------|------|----------|
+| env_check | 环境检测 | check_environment() -> EnvInfo |
+| subtitle_extractor | 软字幕提取 | extract_embedded(video_path) -> SRT|None |
+...
+
+## 4. 配置参数
+VIDEO_INPUT_DIR = "video/"
+SUBTITLE_OUTPUT_DIR = "subtitles/"
+...
+      </div>
+    </div>
+
+    <div class="ai-box">
+      <p>以上为预期效果预览。全部 4 项预览已确认保留，示例使用虚构视频名称和通用文本。</p>
+    </div>
+  </div>
+
+  <!-- 8. 基础简单示例 -->
+  <div class="section">
+    <div class="section-title"><span class="num">8</span> 基础简单示例</div>
+    <p>以下为项目的基础使用示例，帮助开发者快速上手。全部 4 个示例已确认保留，代码片段完整可运行，支持命令行参数。</p>
+
+    <div class="card">
+      <div class="card-title">示例 1：端到端运行</div>
+      <p class="dim">最简使用方式，将视频放入 video/ 文件夹后直接运行：</p>
+      <div class="tree" style="margin-top:12px;">
+<span class="comment"># 1. 将视频文件放入 video/ 文件夹</span>
+cp ~/Downloads/demo_video_01.mp4 video/
+
+<span class="comment"># 2. 运行程序</span>
+python main.py
+
+<span class="comment"># 3. 查看结果</span>
+ls subtitles/demo_video_01/
+<span class="comment"># 输出: demo_video_01_embedded.srt</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">示例 2：指定单个视频处理</div>
+      <p class="dim">通过命令行参数处理单个视频：</p>
+      <div class="tree" style="margin-top:12px;">
+python main.py --input video/demo_video_01.mp4
+
+<span class="comment"># 或指定提取方式</span>
+python main.py --input video/demo_video_01.mp4 --method whisper
+
+<span class="comment"># 或指定输出路径</span>
+python main.py --input video/demo_video_01.mp4 --output custom_subtitles/
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">示例 3：单个模块调用</div>
+      <p class="dim">在代码中单独调用某个模块（供二次开发参考）：</p>
+      <div class="tree" style="margin-top:12px;">
+<span class="comment"># 只用 Whisper 转录音频</span>
+<span class="new">from</span> modules.transcriber <span class="new">import</span> Transcriber
+
+transcriber = Transcriber(model_size=<span class="highlight">"medium"</span>)
+result = transcriber.transcribe(<span class="highlight">"audio.wav"</span>)
+<span class="comment"># result = [{"start": 1.5, "end": 4.2, "text": "..."}, ...]</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">示例 4：AI 工具读取上下文</div>
+      <p class="dim">在 Cursor 或 Claude Code 中引用项目上下文：</p>
+      <div class="tree" style="margin-top:12px;">
+<span class="comment"># Cursor: .cursorrules 自动读取</span>
+<span class="comment"># Claude Code: CLAUDE.md 自动读取</span>
+<span class="comment"># 其他工具: @ai_context/AI_GUIDE.md</span>
+
+<span class="comment"># AI 工具理解项目后，可直接生成模块代码：</span>
+<span class="comment"># "请根据 ai_context/module_specs/transcriber.md</span>
+<span class="comment">#  实现 transcriber.py 模块"</span>
+      </div>
+    </div>
+
+    <div class="ai-box">
+      <p>以上为基础示例。全部 4 个示例已确认保留，代码片段完整可运行，支持命令行参数（--input、--method、--output）。</p>
+    </div>
+  </div>
+
+  <!-- 9. GitHub 推送 -->
+  <div class="section">
+    <div class="section-title"><span class="num">9</span> GitHub 推送</div>
+    <p>项目确认无误后，推送到 GitHub 仓库进行版本管理和代码托管。具体仓库名称、可见性、认证方式等待第五轮提问确认。</p>
+
+    <div class="card">
+      <div class="card-title">推送步骤</div>
+      <div class="tree" style="margin-top:12px;">
+<span class="comment"># 1. 初始化 Git 仓库</span>
+git init
+
+<span class="comment"># 2. 配置 Git 用户信息</span>
+git config user.name "用户名"
+git config user.email "邮箱"
+
+<span class="comment"># 3. 添加文件（.gitignore 已排除 venv/ 等）</span>
+git add .
+
+<span class="comment"># 4. 首次提交</span>
+git commit -m "feat: 视频字幕提取工具初始版本
+
+- 三级回退策略：软字幕提取 -> OCR 硬字幕 -> Whisper 语音转文字
+- 支持 MP4/MKV/AVI/MOV 格式
+- 命令行参数：--input/--method/--output
+- AI 编程辅助模块：AI_GUIDE.md + 模块规格 + 编码规范
+- Python 虚拟环境支持"
+
+<span class="comment"># 5. 设置远程仓库</span>
+git remote add origin https://github.com/用户名/仓库名.git
+
+<span class="comment"># 6. 推送到 GitHub</span>
+git branch -M main
+git push -u origin main
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">.gitignore 已排除的文件</div>
+      <div class="tree" style="margin-top:12px;">
+venv/                <span class="comment"># Python 虚拟环境</span>
+__pycache__/         <span class="comment"># Python 缓存</span>
+temp/                <span class="comment"># 临时文件</span>
+*.wav                <span class="comment"># 临时音频</span>
+error.log            <span class="comment"># 运行日志</span>
+.DS_Store            <span class="comment"># macOS 系统文件</span>
+Thumbs.db            <span class="comment"># Windows 系统文件</span>
+      </div>
+    </div>
+
+    <div class="ai-box">
+      <p>以上为 GitHub 推送流程。具体仓库名称、可见性、认证方式、许可证等待第五轮提问确认后执行。</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>全部 40 项已确认（五轮）。自检中，通过后将推送到 GitHub。</p>
+  </div>
+
+</div>
+</body>
+</html>
