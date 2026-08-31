@@ -45,6 +45,8 @@ def _get_video_duration(video_path: str) -> float:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
         if result.returncode == 0:
@@ -60,7 +62,7 @@ def _extract_frames(
     video_path: str,
     interval: float,
     bottom_ratio: float
-) -> List[Tuple[float, str]]:
+) -> Tuple[List[Tuple[float, str]], str]:
     """
     从视频底部区域按固定间隔截取帧。
 
@@ -93,6 +95,8 @@ def _extract_frames(
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
         if probe.returncode == 0:

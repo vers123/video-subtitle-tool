@@ -37,6 +37,8 @@ def get_subtitle_streams(video_path: str) -> List[Dict]:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -139,6 +141,8 @@ def extract_embedded(video_path: str) -> Optional[str]:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):

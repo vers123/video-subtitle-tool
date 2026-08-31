@@ -74,7 +74,7 @@ def scan_video_files(input_dir: str) -> List[str]:
                 video_files.append(os.path.abspath(filepath))
             else:
                 # 跳过非视频文件和隐藏文件
-                if not filename.startswith(".") and not filename.startswith("."):
+                if not filename.startswith("."):
                     ext = os.path.splitext(filename)[1].lower()
                     if ext and ext not in [".srt", ".txt", ".md", ".log"]:
                         unsupported_files.append(filename)
