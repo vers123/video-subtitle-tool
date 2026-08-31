@@ -212,14 +212,23 @@ def _init_paddleocr_v3(language: str):
     3.x 移除了 show_log、use_angle_cls 参数。
     PP-OCRv6 默认支持中英日繁，无需指定 lang。
 
+    重要：PaddlePaddle 3.3.x 的 oneDNN (MKLDNN) 后端与 PIR 新执行器
+    存在兼容性 bug，会导致 ConvertPirAttribute2RuntimeAttribute 错误。
+    必须显式禁用 enable_mkldnn=False 才能在 CPU 上正常推理。
+
     Returns:
         PaddleOCR 实例
     """
+    import os
+    # 额外保险：环境变量层面也禁用 mkldnn
+    os.environ["FLAGS_use_mkldnn"] = "0"
+
     from paddleocr import PaddleOCR
     return PaddleOCR(
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
         use_textline_orientation=False,
+        enable_mkldnn=False,
     )
 
 
