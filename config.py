@@ -57,7 +57,7 @@ AUDIO_CHANNELS = 1         # 单声道
 OCR_BOTTOM_REGION_RATIO = 0.15
 
 # OCR 截帧间隔（秒），每隔多少秒截取一帧进行识别
-OCR_FRAME_INTERVAL = 1.0
+OCR_FRAME_INTERVAL = 0.5
 
 # OCR 识别语言（PaddleOCR 语言模型）
 # "ch" 表示中文，"en" 表示英文

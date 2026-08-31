@@ -33,3 +33,4 @@ video/*
 !video/.gitkeep
 subtitles/*
 !subtitles/.gitkeep
+.uploads/

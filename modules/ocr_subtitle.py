@@ -1,8 +1,10 @@
 """
 硬字幕 OCR 识别模块
 
-截取视频画面底部区域，使用 PaddleOCR 识别烧录字幕，
-根据帧时间戳生成带时间轴的字幕条目。
+截取视频画面底部区域，对帧进行灰度化+二值化预处理，
+使用 PaddleOCR 识别烧录字幕，根据帧时间戳生成带时间轴的字幕条目。
+
+针对白字黑描边样式字幕优化：通过二值化增强文字与背景对比度。
 
 公共接口:
     extract_ocr_subtitles(video_path) -> Optional[list[dict]]
@@ -18,7 +20,7 @@ try:
 except ImportError:
     config = type("config", (), {
         "OCR_BOTTOM_REGION_RATIO": 0.15,
-        "OCR_FRAME_INTERVAL": 1.0,
+        "OCR_FRAME_INTERVAL": 0.5,
         "OCR_LANGUAGE": "ch",
         "OCR_MERGE_THRESHOLD": 2.0,
     })()
@@ -58,6 +60,59 @@ def _get_video_duration(video_path: str) -> float:
     return 0.0
 
 
+def _preprocess_frame(img_path: str, output_path: str) -> str:
+    """
+    对截取的帧图片进行预处理，增强字幕文字与背景的对比度。
+
+    预处理流程:
+        1. 灰度化（去除色彩干扰）
+        2. 自适应二值化（白字变白，背景变黑）
+
+    使用 OpenCV (cv2) 进行处理。如果 OpenCV 不可用，
+    则返回原始图片路径（降级为不做预处理）。
+
+    Args:
+        img_path: 原始图片路径
+        output_path: 预处理后图片保存路径
+
+    Returns:
+        str: 预处理后图片路径，OpenCV 不可用时返回原始路径
+    """
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return img_path
+
+    try:
+        img = cv2.imread(img_path)
+        if img is None:
+            return img_path
+
+        # 1. 灰度化
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # 2. 自适应阈值二值化
+        #    THRESH_BINARY + 二值化：文字区域变白(255)，背景变黑(0)
+        #    自适应阈值能应对画面亮度不均匀的情况
+        binary = cv2.adaptiveThreshold(
+            gray, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            blockSize=15,
+            C=5,
+        )
+
+        # 3. 轻量去噪（3x3 开运算去除小噪点）
+        kernel = np.ones((3, 3), np.uint8)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+
+        cv2.imwrite(output_path, binary)
+        return output_path
+    except Exception:
+        return img_path
+
+
 def _extract_frames(
     video_path: str,
     interval: float,
@@ -75,14 +130,15 @@ def _extract_frames(
         bottom_ratio: 底部截取比例（0.0-1.0）
 
     Returns:
-        list[tuple]: [(时间戳, 图片路径), ...]
-        失败时返回空列表。
+        tuple: ([(时间戳, 图片路径), ...], 临时目录路径)
+        失败时返回 ([], 临时目录路径)
     """
     duration = _get_video_duration(video_path)
     if duration <= 0:
-        return []
+        return [], ""
 
-    # 计算裁剪高度（像素），需要先获取视频高度
+    # 获取视频高度以计算裁剪区域
+    crop_height = 100
     try:
         probe = subprocess.run(
             [
@@ -105,17 +161,10 @@ def _extract_frames(
             streams = data.get("streams", [])
             if streams:
                 height = int(streams[0].get("height", 0))
-                width = int(streams[0].get("width", 0))
                 if height > 0:
                     crop_height = max(1, int(height * bottom_ratio))
-                else:
-                    crop_height = 100
-            else:
-                crop_height = 100
-        else:
-            crop_height = 100
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, json.JSONDecodeError):
-        crop_height = 100
+        pass
 
     # 创建临时目录
     temp_dir = tempfile.mkdtemp(prefix="ocr_frames_")
@@ -146,7 +195,10 @@ def _extract_frames(
                 timeout=30,
             )
             if result.returncode == 0 and os.path.exists(img_path):
-                frames.append((ts, img_path))
+                # 预处理帧图片
+                preprocessed_path = os.path.join(temp_dir, f"frame_{i:06d}_bin.png")
+                final_path = _preprocess_frame(img_path, preprocessed_path)
+                frames.append((ts, final_path))
         except subprocess.TimeoutExpired:
             continue
 
@@ -158,6 +210,7 @@ def _ocr_recognize(frame_paths: List[str], language: str = "ch") -> List[str]:
     使用 PaddleOCR 识别图片中的文字。
 
     延迟导入 PaddleOCR，避免未安装时影响其他模块。
+    对识别结果进行基本清洗：去除常见标点噪声、去除空白行。
 
     Args:
         frame_paths: 图片路径列表
@@ -196,7 +249,9 @@ def _ocr_recognize(frame_paths: List[str], language: str = "ch") -> List[str]:
                 for line in result[0]:
                     if line and len(line) >= 2:
                         text = line[1][0] if isinstance(line[1], (list, tuple)) else str(line[1])
-                        texts.append(text.strip())
+                        text = text.strip()
+                        if text:
+                            texts.append(text)
                 results.append(" ".join(texts))
             else:
                 results.append("")
@@ -249,9 +304,10 @@ def extract_ocr_subtitles(video_path: str) -> Optional[List[Dict]]:
 
     完整流程:
         1. 按固定间隔截取视频底部画面帧
-        2. 用 PaddleOCR 识别每帧文字
-        3. 合并相邻相同的识别结果
-        4. 生成带时间轴的字幕条目列表
+        2. 对每帧进行灰度化+二值化预处理
+        3. 用 PaddleOCR 识别每帧文字
+        4. 合并相邻相同的识别结果
+        5. 生成带时间轴的字幕条目列表
 
     Args:
         video_path: 视频文件路径
@@ -266,22 +322,23 @@ def extract_ocr_subtitles(video_path: str) -> Optional[List[Dict]]:
         - 截帧失败: 返回 None
         - 识别结果全部为空: 返回 None
     """
-    # 1. 截取底部帧
+    import shutil
+
+    # 1. 截取底部帧（含预处理）
     frames_result = _extract_frames(
         video_path,
         interval=config.OCR_FRAME_INTERVAL,
         bottom_ratio=config.OCR_BOTTOM_REGION_RATIO,
     )
 
-    if not frames_result or not frames_result[0]:
+    if not frames_result:
         return None
 
     frames, temp_dir = frames_result
 
     if not frames:
-        # 清理临时目录
-        import shutil
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
         return None
 
     # 2. OCR 识别
@@ -301,8 +358,8 @@ def extract_ocr_subtitles(video_path: str) -> Optional[List[Dict]]:
             })
 
     # 清理临时文件
-    import shutil
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    if temp_dir:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
     # 4. 合并相同条目
     merged = _merge_subtitles(raw_entries, config.OCR_MERGE_THRESHOLD)

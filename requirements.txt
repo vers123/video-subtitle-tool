@@ -11,6 +11,10 @@ ffmpeg-python>=0.2.0
 paddleocr>=2.7.0
 paddlepaddle>=2.6.0
 
+# 图片预处理（灰度化、二值化，用于增强 OCR 识别率）
+opencv-python>=4.8.0
+numpy>=1.24.0
+
 # SRT 字幕文件读写
 pysrt>=1.1.2
 
