@@ -1,13 +1,18 @@
 # 视频字幕提取工具 - Python 依赖清单
-# 安装命令: pip install -r requirements.txt --break-system-packages
+# 安装命令: pip install -r requirements.txt
 
 # 语音转文字
 openai-whisper>=20231117
 
+# PyTorch（Whisper 依赖）
+# GPU 加速（NVIDIA 显卡，推荐）：pip install torch --index-url https://download.pytorch.org/whl/cu121
+# 仅 CPU：pip install torch
+torch>=2.0.0
+
 # ffmpeg Python 封装
 ffmpeg-python>=0.2.0
 
-# OCR 识别硬字幕
+# OCR 识别硬字幕（兼容 2.x 和 3.x）
 paddleocr>=2.7.0
 paddlepaddle>=2.6.0
 

@@ -205,12 +205,140 @@ def _extract_frames(
     return frames, temp_dir
 
 
+def _detect_paddleocr_version() -> int:
+    """
+    检测已安装的 PaddleOCR 主版本号。
+
+    Returns:
+        int: 主版本号（2 或 3），检测失败返回 3（按新 API 尝试）
+    """
+    try:
+        import paddleocr
+        version_str = getattr(paddleocr, "__version__", "3.0.0")
+        return int(version_str.split(".")[0])
+    except Exception:
+        return 3
+
+
+def _init_paddleocr_v3(language: str):
+    """
+    初始化 PaddleOCR 3.x 引擎。
+
+    3.x 移除了 show_log、use_angle_cls 参数，
+    新增 use_doc_orientation_classify 等参数。
+    PP-OCRv5 默认支持中英日繁，无需指定 lang。
+
+    Args:
+        language: 识别语言（3.x 中 PP-OCRv5 原生支持中文，此参数仅用于兼容）
+
+    Returns:
+        PaddleOCR 实例
+    """
+    from paddleocr import PaddleOCR
+    return PaddleOCR(
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        use_textline_orientation=False,
+    )
+
+
+def _init_paddleocr_v2(language: str):
+    """
+    初始化 PaddleOCR 2.x 引擎（向后兼容）。
+
+    Args:
+        language: 识别语言 ("ch" 或 "en")
+
+    Returns:
+        PaddleOCR 实例
+    """
+    from paddleocr import PaddleOCR
+    return PaddleOCR(
+        use_angle_cls=True,
+        lang=language,
+        show_log=False,
+    )
+
+
+def _extract_text_v3(result) -> str:
+    """
+    从 PaddleOCR 3.x predict() 结果中提取文字。
+
+    3.x 结果为可迭代对象，每个元素含 .json 属性，
+    json 中 rec_texts 字段为识别到的文字列表。
+
+    Args:
+        result: predict() 返回的结果对象
+
+    Returns:
+        str: 拼接后的文字，无文字返回空字符串
+    """
+    texts = []
+    for res in result:
+        # 方式1：通过 .json 属性访问
+        if hasattr(res, "json"):
+            json_data = res.json
+            if isinstance(json_data, dict):
+                rec_texts = json_data.get("rec_texts", [])
+                for t in rec_texts:
+                    t = t.strip() if t else ""
+                    if t:
+                        texts.append(t)
+                if texts:
+                    continue
+            # 方式2：json 可能是字符串
+            elif isinstance(json_data, str):
+                import json as _json
+                try:
+                    data = _json.loads(json_data)
+                    rec_texts = data.get("rec_texts", [])
+                    for t in rec_texts:
+                        t = t.strip() if t else ""
+                        if t:
+                            texts.append(t)
+                except (_json.JSONDecodeError, AttributeError):
+                    pass
+
+        # 方式3：直接访问 res 的属性
+        if not texts and hasattr(res, "rec_texts"):
+            rec_texts = getattr(res, "rec_texts", [])
+            for t in rec_texts:
+                t = t.strip() if t else ""
+                if t:
+                    texts.append(t)
+
+    return " ".join(texts)
+
+
+def _extract_text_v2(result) -> str:
+    """
+    从 PaddleOCR 2.x ocr() 结果中提取文字。
+
+    2.x 结果格式: [[box, (text, confidence)], ...]
+
+    Args:
+        result: ocr() 返回的结果
+
+    Returns:
+        str: 拼接后的文字，无文字返回空字符串
+    """
+    texts = []
+    if result and result[0]:
+        for line in result[0]:
+            if line and len(line) >= 2:
+                text = line[1][0] if isinstance(line[1], (list, tuple)) else str(line[1])
+                text = text.strip() if text else ""
+                if text:
+                    texts.append(text)
+    return " ".join(texts)
+
+
 def _ocr_recognize(frame_paths: List[str], language: str = "ch") -> List[str]:
     """
     使用 PaddleOCR 识别图片中的文字。
 
+    自动适配 PaddleOCR 2.x 和 3.x API。
     延迟导入 PaddleOCR，避免未安装时影响其他模块。
-    对识别结果进行基本清洗：去除常见标点噪声、去除空白行。
 
     Args:
         frame_paths: 图片路径列表
@@ -228,13 +356,15 @@ def _ocr_recognize(frame_paths: List[str], language: str = "ch") -> List[str]:
         print("[!] PaddleOCR 未安装，OCR 功能不可用")
         return [""] * len(frame_paths)
 
-    # 初始化 OCR 引擎（使用中文模型）
+    # 检测 PaddleOCR 版本，选择对应 API
+    major_version = _detect_paddleocr_version()
+
+    # 初始化 OCR 引擎
     try:
-        ocr = PaddleOCR(
-            use_angle_cls=True,
-            lang=language,
-            show_log=False,
-        )
+        if major_version >= 3:
+            ocr = _init_paddleocr_v3(language)
+        else:
+            ocr = _init_paddleocr_v2(language)
     except Exception as e:
         print(f"[!] PaddleOCR 初始化失败: {e}")
         return [""] * len(frame_paths)
@@ -242,19 +372,15 @@ def _ocr_recognize(frame_paths: List[str], language: str = "ch") -> List[str]:
     results = []
     for img_path in frame_paths:
         try:
-            result = ocr.ocr(img_path, cls=True)
-            if result and result[0]:
-                # 提取所有识别到的文字行，拼接为一条
-                texts = []
-                for line in result[0]:
-                    if line and len(line) >= 2:
-                        text = line[1][0] if isinstance(line[1], (list, tuple)) else str(line[1])
-                        text = text.strip()
-                        if text:
-                            texts.append(text)
-                results.append(" ".join(texts))
+            if major_version >= 3:
+                # PaddleOCR 3.x: 使用 predict()
+                result = ocr.predict(input=img_path)
+                text = _extract_text_v3(result)
             else:
-                results.append("")
+                # PaddleOCR 2.x: 使用 ocr()
+                result = ocr.ocr(img_path, cls=True)
+                text = _extract_text_v2(result)
+            results.append(text)
         except Exception:
             results.append("")
 

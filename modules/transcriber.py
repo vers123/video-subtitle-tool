@@ -67,6 +67,7 @@ class Transcriber:
         延迟加载 Whisper 模型。
 
         首次调用时加载模型到内存/GPU，后续调用复用。
+        自动检测 CUDA 可用性，有 GPU 时使用 GPU 加速。
 
         Raises:
             ImportError: whisper 未安装
@@ -82,7 +83,22 @@ class Transcriber:
                 "openai-whisper 未安装。请运行: pip install openai-whisper"
             )
 
-        print(f"    -> 加载 Whisper 模型: {self.model_size} ...")
+        # 检测 CUDA 可用性
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+        except ImportError:
+            cuda_available = False
+
+        if cuda_available:
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"    -> 加载 Whisper 模型: {self.model_size} (GPU: {gpu_name}) ...")
+        else:
+            print(f"    -> 加载 Whisper 模型: {self.model_size} (CPU 模式) ...")
+            print("    -> [!] 未检测到 GPU 加速，转录速度较慢")
+            print("    -> [!] 如需 GPU 加速，请安装 CUDA 版 PyTorch:")
+            print("    ->     pip install torch --index-url https://download.pytorch.org/whl/cu121")
+
         self._model = whisper.load_model(self.model_size)
         print(f"    -> 模型加载完成")
 
