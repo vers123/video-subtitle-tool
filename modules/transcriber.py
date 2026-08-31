@@ -97,7 +97,7 @@ class Transcriber:
             print(f"    -> 加载 Whisper 模型: {self.model_size} (CPU 模式) ...")
             print("    -> [!] 未检测到 GPU 加速，转录速度较慢")
             print("    -> [!] 如需 GPU 加速，请安装 CUDA 版 PyTorch:")
-            print("    ->     pip install torch --index-url https://download.pytorch.org/whl/cu121")
+            print("    ->     pip install torch --index-url https://download.pytorch.org/whl/cu126")
 
         self._model = whisper.load_model(self.model_size)
         print(f"    -> 模型加载完成")

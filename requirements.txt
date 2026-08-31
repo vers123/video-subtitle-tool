@@ -5,7 +5,7 @@
 openai-whisper>=20231117
 
 # PyTorch（Whisper 依赖）
-# GPU 加速（NVIDIA 显卡，推荐）：pip install torch --index-url https://download.pytorch.org/whl/cu121
+# GPU 加速（NVIDIA 显卡，推荐）：pip install torch --index-url https://download.pytorch.org/whl/cu126
 # 仅 CPU：pip install torch
 torch>=2.0.0
 

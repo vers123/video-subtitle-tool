@@ -161,3 +161,10 @@ A: 可在 `config.py` 中调整 `OCR_BOTTOM_REGION_RATIO`（截取区域比例�
 
 **Q: 没有 GPU 能用吗？**
 A: 可以。程序会自动检测 GPU，无 GPU 时使用 small 模型在 CPU 上运行，速度较慢但功能完整。
+
+**Q: 如何启用 GPU 加速 Whisper？**
+A: 安装 CUDA 版 PyTorch（需 NVIDIA 显卡）：
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu126
+```
+安装后程序会自动检测并使用 GPU。
